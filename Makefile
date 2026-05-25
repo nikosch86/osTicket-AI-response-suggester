@@ -36,7 +36,7 @@ install-lint:
 	$(DOCKER_COMPOSER) require --dev squizlabs/php_codesniffer
 
 build:
-	@echo "Building $(PLUGIN_NAME)-$(VERSION).tar.gz..."
+	@echo "Building $(PLUGIN_NAME)-$(VERSION) release artifacts..."
 	@rm -rf dist/staging
 	@mkdir -p dist/staging/$(PLUGIN_NAME)
 	@rsync -a \
@@ -46,16 +46,23 @@ build:
 		--exclude='/coverage' \
 		--exclude='/docs' \
 		--exclude='/.github' \
+		--exclude='/bin' \
 		--exclude='.git*' \
+		--exclude='.claude*' \
+		--exclude='.idea' \
+		--exclude='.vscode' \
+		--exclude='.cursor' \
 		--exclude='Makefile' \
 		--exclude='composer.*' \
 		--exclude='phpunit.xml' \
 		--exclude='.phpunit.result.cache' \
 		./ dist/staging/$(PLUGIN_NAME)/
 	@tar -czf dist/$(PLUGIN_NAME)-$(VERSION).tar.gz -C dist/staging $(PLUGIN_NAME)
-	@cd dist && sha256sum $(PLUGIN_NAME)-$(VERSION).tar.gz > SHA256SUMS
+	@$(DOCKER_PHP) php -d phar.readonly=0 bin/build-phar.php $(VERSION)
+	@cd dist && sha256sum $(PLUGIN_NAME)-$(VERSION).tar.gz $(PLUGIN_NAME)-$(VERSION).phar > SHA256SUMS
 	@rm -rf dist/staging
 	@echo "Built dist/$(PLUGIN_NAME)-$(VERSION).tar.gz"
+	@echo "Built dist/$(PLUGIN_NAME)-$(VERSION).phar"
 	@cat dist/SHA256SUMS
 
 clean:

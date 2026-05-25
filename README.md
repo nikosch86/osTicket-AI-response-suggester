@@ -17,26 +17,45 @@ Supports **OpenAI**, **Anthropic**, and any **OpenAI-compatible** API endpoint.
 
 ## Installation
 
-The plugin is distributed as a versioned tarball attached to each [GitHub Release](https://github.com/nikosch86/osTicket-AI-response-suggester/releases). The artifact contains exactly the plugin files — no `vendor/`, no `tests/`, no dev scaffolding.
+Two artifacts are published with each [GitHub Release](https://github.com/nikosch86/osTicket-AI-response-suggester/releases):
 
-### Download and verify
+| Artifact | When to pick it |
+|---|---|
+| **`ai-response-suggester-X.Y.Z.phar`** | Recommended default. Single file, PHP-signed (SHA-256) — load-time integrity is automatic, atomic replacement on upgrade. Same shape as osTicket's official `storage-fs.phar`. |
+| **`ai-response-suggester-X.Y.Z.tar.gz`** | Pick when you want to inspect or patch the files locally, or when your environment can't load phars. |
+
+A `SHA256SUMS` file is published alongside both for out-of-band verification. Pick one artifact — don't install both.
+
+### Recommended: phar install
 
 ```bash
-VERSION=1.0.0
+VERSION=1.0.1
+BASE="https://github.com/nikosch86/osTicket-AI-response-suggester/releases/download/v${VERSION}"
+curl -fsSLO "${BASE}/ai-response-suggester-${VERSION}.phar"
+curl -fsSLO "${BASE}/SHA256SUMS"
+sha256sum --ignore-missing -c SHA256SUMS
+
+install -m 0644 -o www-data -g www-data \
+  "ai-response-suggester-${VERSION}.phar" \
+  /path/to/osticket/include/plugins/ai-response-suggester.phar
+```
+
+PHP also verifies the phar's built-in SHA-256 signature every time it's loaded — so the external `sha256sum` check is belt-and-braces, not strictly required.
+
+### Alternative: tarball install
+
+```bash
+VERSION=1.0.1
 BASE="https://github.com/nikosch86/osTicket-AI-response-suggester/releases/download/v${VERSION}"
 curl -fsSLO "${BASE}/ai-response-suggester-${VERSION}.tar.gz"
 curl -fsSLO "${BASE}/SHA256SUMS"
-sha256sum -c SHA256SUMS
-```
+sha256sum --ignore-missing -c SHA256SUMS
 
-### Extract into osTicket
-
-```bash
 tar -xzf "ai-response-suggester-${VERSION}.tar.gz" -C /path/to/osticket/include/plugins/
 chown -R www-data:www-data /path/to/osticket/include/plugins/ai-response-suggester
 ```
 
-This creates `/path/to/osticket/include/plugins/ai-response-suggester/`. Adjust the ownership to whatever user PHP-FPM runs as on your host.
+This creates `/path/to/osticket/include/plugins/ai-response-suggester/`. Adjust ownership to whatever user PHP-FPM runs as on your host.
 
 ### Enable in osTicket
 
@@ -47,13 +66,25 @@ This creates `/path/to/osticket/include/plugins/ai-response-suggester/`. Adjust 
 
 ## Upgrade
 
+**Phar install** — replace the file:
+
 ```bash
-VERSION=1.0.1
-# (download + verify as above)
+VERSION=1.0.2
+# download + verify as in Installation
+install -m 0644 -o www-data -g www-data \
+  "ai-response-suggester-${VERSION}.phar" \
+  /path/to/osticket/include/plugins/ai-response-suggester.phar
+```
+
+**Tarball install** — extract over the existing directory:
+
+```bash
+VERSION=1.0.2
+# download + verify as in Installation
 tar -xzf "ai-response-suggester-${VERSION}.tar.gz" -C /path/to/osticket/include/plugins/
 ```
 
-The contents replace cleanly over the existing directory. osTicket detects the new manifest version (`plugin.php`'s `version` field) on the next admin page load and surfaces an "upgrade available" prompt where appropriate.
+Either way, osTicket detects the new manifest version (`plugin.php`'s `version` field) on the next admin page load and surfaces an "upgrade available" prompt where appropriate.
 
 > **Schema changes between versions are not automated yet** — see [Limitations](#limitations). Until that gap is closed, any release that requires a schema change documents the manual `ALTER` in its release notes.
 
@@ -62,7 +93,7 @@ The contents replace cleanly over the existing directory. osTicket detects the n
 This plugin does not orchestrate its own deployment. If you are scripting installs (Ansible, Docker, CI/CD pipelines), the following are your responsibility, not the plugin's:
 
 - **Opcache invalidation.** PHP-FPM running with `opcache.validate_timestamps=0` will keep old code in memory until php-fpm is reloaded. Freshly-extracted files will appear to do nothing until you `systemctl reload php-fpm` (or equivalent).
-- **File ownership and permissions.** The user PHP-FPM runs as must be able to read every file under `ai-response-suggester/`.
+- **File ownership and permissions.** The user PHP-FPM runs as must be able to read the deployed artifact — either every file under `ai-response-suggester/` (tarball install) or the single `ai-response-suggester.phar` file (phar install).
 - **One-time admin install/enable on a fresh install.** osTicket's plugin registry lives in the database. The first time the plugin is deployed, a human must click **Install** and **Enable** in the admin UI (or write directly to `ost_plugin`). Subsequent file-only upgrades do not need this step.
 
 ## Configuration
@@ -212,7 +243,9 @@ ai-response-suggester/
 ├── docs/
 │   └── adr/                            # Architecture decision records
 ├── .github/
-│   └── workflows/release.yml           # Builds tarball + SHA256SUMS on tag push
+│   └── workflows/                      # CI on push/PR; release builds + publishes on v* tag push
+├── bin/
+│   └── build-phar.php                  # Builds a signed .phar from the staged plugin tree
 ├── Makefile                            # Docker-based test/lint/build targets
 ├── composer.json
 └── phpunit.xml
@@ -232,14 +265,15 @@ make test
 # Run linter (requires: make install-lint)
 make lint
 
-# Build distributable archive (VERSION auto-extracted from plugin.php; override with VERSION=x.y.z)
+# Build both release artifacts (.tar.gz + signed .phar) plus SHA256SUMS into dist/
+# (VERSION auto-extracted from plugin.php; override with VERSION=x.y.z)
 make build
 
 # Clean build artifacts
 make clean
 ```
 
-Releases are tag-driven and built by CI — see [`docs/adr/0001-release-pipeline.md`](docs/adr/0001-release-pipeline.md). Cutting a release is: bump `plugin.php`'s `version`, commit, `git tag vX.Y.Z && git push --tags`. The workflow validates the tag against the manifest, builds the tarball, and publishes the Release.
+Releases are tag-driven and built by CI — see [`docs/adr/0001-release-pipeline.md`](docs/adr/0001-release-pipeline.md). Cutting a release is: bump `plugin.php`'s `version`, commit, `git tag vX.Y.Z && git push --tags`. The workflow validates the tag against the manifest, builds both artifacts, and publishes the Release.
 
 ## Limitations
 

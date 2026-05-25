@@ -48,4 +48,5 @@ jobs:
             --generate-notes \
             "${PRERELEASE_FLAG[@]}" \
             "dist/ai-response-suggester-${VERSION}.tar.gz" \
+            "dist/ai-response-suggester-${VERSION}.phar" \
             "dist/SHA256SUMS"
