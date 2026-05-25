@@ -2,7 +2,7 @@
 
 return array(
     'id' =>             'osticket:ai-response-suggester',
-    'version' =>        '1.0.1',
+    'version' =>        '1.1.0',
     'name' =>           'AI Response Suggester',
     'description' =>    'AI-powered response suggestions combining canned responses, ticket context, and crawled knowledge base content.',
     'author' =>         'osTicket AI',
