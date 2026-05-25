@@ -128,6 +128,8 @@ After installing, configure the plugin under **Admin Panel > Manage > Plugins > 
 | **Crawl Depth** | Maximum link depth to follow (1-10, default: 3). |
 | **Max Pages to Crawl** | Maximum number of pages to crawl (1-200, default: 50). |
 | **Summarize with AI** | When enabled, each crawled page is sent through the AI to extract only support-relevant content (procedures, FAQs, policies). This produces cleaner knowledge base context but uses API tokens per page. |
+| **Respect robots.txt** | When enabled (default), the crawler fetches `/robots.txt` from the target host and skips URLs disallowed for `osTicket-AI-Crawler`. Disable only when crawling internal docs you control. |
+| **Skip Patterns** | Optional list of URL patterns (one per line) to skip in addition to `robots.txt`. Matched against path+query. Wildcards: `*` = any chars, `$` = end-of-path. Patterns starting with `/` anchor to the path start; otherwise they may match anywhere. Example: `/admin/`, `*/drafts/*`, `/private$`. |
 
 ### Debug
 
@@ -223,6 +225,7 @@ ai-response-suggester/
 │   ├── CannedResponseProvider.php      # Fetches department-filtered canned responses
 │   ├── PromptBuilder.php               # Assembles AI prompt from all sources
 │   ├── WebCrawler.php                  # BFS website crawler (same-domain, depth-limited)
+│   ├── RobotsTxtParser.php             # RFC 9309 robots.txt matcher
 │   ├── ContentStore.php                # DB table CRUD for crawled content
 │   └── AIClient/
 │       ├── AIClientInterface.php       # Common interface

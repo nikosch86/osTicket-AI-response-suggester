@@ -148,12 +148,21 @@ class AIResponseSuggesterAjax extends AjaxController {
         $instanceId = $inst ? $inst->getId() : 0;
 
         $useAi = (bool) $cfg->get('crawl_use_ai');
+        $respectRobots = $cfg->get('crawl_respect_robots') === null
+            ? true
+            : (bool) $cfg->get('crawl_respect_robots');
+        $skipPatterns = preg_split('/\r\n|\r|\n/', (string) $cfg->get('crawl_skip_patterns'));
 
         try {
             $store = new ContentStore();
             $store->clear($instanceId);
 
-            $crawler = new WebCrawler($maxDepth, $maxPages);
+            $crawler = new WebCrawler(
+                maxDepth: $maxDepth,
+                maxPages: $maxPages,
+                respectRobots: $respectRobots,
+                skipPatterns: $skipPatterns
+            );
             $pages = $crawler->crawl($baseUrl);
 
             $stored = 0;

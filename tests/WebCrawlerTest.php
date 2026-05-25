@@ -2,6 +2,7 @@
 
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/../src/RobotsTxtParser.php';
 require_once __DIR__ . '/../src/WebCrawler.php';
 
 class WebCrawlerTest extends TestCase {
@@ -130,5 +131,133 @@ class WebCrawlerTest extends TestCase {
         $pagesProp = new ReflectionProperty(WebCrawler::class, 'maxPages');
         $pagesProp->setAccessible(true);
         $this->assertEquals(100, $pagesProp->getValue($crawler));
+    }
+
+    public function testConstructorDefaultsRespectRobotsAndEmptySkip(): void {
+        $crawler = new WebCrawler();
+
+        $respect = new ReflectionProperty(WebCrawler::class, 'respectRobots');
+        $respect->setAccessible(true);
+        $this->assertTrue($respect->getValue($crawler));
+
+        $skip = new ReflectionProperty(WebCrawler::class, 'skipPatterns');
+        $skip->setAccessible(true);
+        $this->assertEquals(array(), $skip->getValue($crawler));
+    }
+
+    public function testConstructorAcceptsRobotsAndSkipPatterns(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, false, array('/admin/', '*/draft'));
+
+        $respect = new ReflectionProperty(WebCrawler::class, 'respectRobots');
+        $respect->setAccessible(true);
+        $this->assertFalse($respect->getValue($crawler));
+
+        $skip = new ReflectionProperty(WebCrawler::class, 'skipPatterns');
+        $skip->setAccessible(true);
+        $this->assertEquals(array('/admin/', '*/draft'), $skip->getValue($crawler));
+    }
+
+    public function testSkipPatternsAreTrimmedAndEmptiesDropped(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, true, array('  /admin/  ', '', '   ', '/x'));
+
+        $skip = new ReflectionProperty(WebCrawler::class, 'skipPatterns');
+        $skip->setAccessible(true);
+        $this->assertEquals(array('/admin/', '/x'), $skip->getValue($crawler));
+    }
+
+    public function testShouldSkipMatchesPrefixPattern(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, false, array('/admin/'));
+        $method = new ReflectionMethod(WebCrawler::class, 'shouldSkip');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($crawler, 'https://example.com/admin/users'));
+        $this->assertFalse($method->invoke($crawler, 'https://example.com/public'));
+    }
+
+    public function testShouldSkipMatchesWildcard(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, false, array('*/drafts/*'));
+        $method = new ReflectionMethod(WebCrawler::class, 'shouldSkip');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($crawler, 'https://example.com/blog/drafts/post-1'));
+        $this->assertFalse($method->invoke($crawler, 'https://example.com/blog/published/post-1'));
+    }
+
+    public function testShouldSkipUsesDollarAnchor(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, false, array('/private$'));
+        $method = new ReflectionMethod(WebCrawler::class, 'shouldSkip');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($crawler, 'https://example.com/private'));
+        $this->assertFalse($method->invoke($crawler, 'https://example.com/private/sub'));
+    }
+
+    public function testShouldSkipFollowsRobotsWhenEnabled(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, true, array());
+        $parser = new RobotsTxtParser("User-agent: *\nDisallow: /admin/");
+        $parserProp = new ReflectionProperty(WebCrawler::class, 'robotsParser');
+        $parserProp->setAccessible(true);
+        $parserProp->setValue($crawler, $parser);
+
+        $method = new ReflectionMethod(WebCrawler::class, 'shouldSkip');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($crawler, 'https://example.com/admin/x'));
+        $this->assertFalse($method->invoke($crawler, 'https://example.com/public'));
+    }
+
+    public function testShouldSkipIgnoresRobotsWhenDisabled(): void {
+        $crawler = new WebCrawler(3, 50, 51200, 15, false, array());
+        $parser = new RobotsTxtParser("User-agent: *\nDisallow: /");
+        $parserProp = new ReflectionProperty(WebCrawler::class, 'robotsParser');
+        $parserProp->setAccessible(true);
+        $parserProp->setValue($crawler, $parser);
+
+        $method = new ReflectionMethod(WebCrawler::class, 'shouldSkip');
+        $method->setAccessible(true);
+
+        $this->assertFalse($method->invoke($crawler, 'https://example.com/anything'));
+    }
+
+    public function testSkipListAppliesWhenRobotsDisabled(): void {
+        // Toggling robots off must still apply the skip list (per design)
+        $crawler = new WebCrawler(3, 50, 51200, 15, false, array('/admin/'));
+        $method = new ReflectionMethod(WebCrawler::class, 'shouldSkip');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($crawler, 'https://example.com/admin/users'));
+    }
+
+    public function testBuildRobotsParserDisallowsAllOn5xx(): void {
+        $method = new ReflectionMethod(WebCrawler::class, 'buildRobotsParser');
+        $method->setAccessible(true);
+
+        $parser = $method->invoke(null, 'irrelevant', 503);
+        $this->assertFalse($parser->isAllowed('https://example.com/anything', 'MyBot'));
+    }
+
+    public function testBuildRobotsParserDisallowsAllOnUnreachable(): void {
+        $method = new ReflectionMethod(WebCrawler::class, 'buildRobotsParser');
+        $method->setAccessible(true);
+
+        $parser = $method->invoke(null, false, 0);
+        $this->assertFalse($parser->isAllowed('https://example.com/anything', 'MyBot'));
+    }
+
+    public function testBuildRobotsParserAllowsAllOn4xx(): void {
+        $method = new ReflectionMethod(WebCrawler::class, 'buildRobotsParser');
+        $method->setAccessible(true);
+
+        $parser = $method->invoke(null, 'irrelevant body', 404);
+        $this->assertTrue($parser->isAllowed('https://example.com/anything', 'MyBot'));
+    }
+
+    public function testBuildRobotsParserParsesBodyOn2xx(): void {
+        $method = new ReflectionMethod(WebCrawler::class, 'buildRobotsParser');
+        $method->setAccessible(true);
+
+        $parser = $method->invoke(null, "User-agent: *\nDisallow: /admin/", 200);
+        $this->assertFalse($parser->isAllowed('https://example.com/admin/x', 'MyBot'));
+        $this->assertTrue($parser->isAllowed('https://example.com/public', 'MyBot'));
     }
 }

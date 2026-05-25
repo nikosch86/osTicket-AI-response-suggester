@@ -398,6 +398,23 @@ class AIResponseSuggesterConfig extends PluginConfig {
                     'desc' => __('Send each crawled page through the AI to extract support-relevant content. Uses API tokens per page.'),
                 ),
             )),
+            'crawl_respect_robots' => new BooleanField(array(
+                'label' => __('Respect robots.txt'),
+                'default' => true,
+                'configuration' => array(
+                    'desc' => __('Fetch /robots.txt from the target host and skip URLs disallowed for our crawler. Disable only when crawling internal documentation you control.'),
+                ),
+            )),
+            'crawl_skip_patterns' => new TextareaField(array(
+                'label' => __('Skip Patterns'),
+                'required' => false,
+                'configuration' => array(
+                    'rows' => 4,
+                    'html' => false,
+                    'placeholder' => "/admin/\n*/drafts/*\n/private$",
+                ),
+                'hint' => __('One URL pattern per line. Matched against the path+query. Wildcards: * = any chars, $ = end-of-path. Patterns starting with / are anchored to the path start; otherwise they may match anywhere.'),
+            )),
             'enable_logging' => new BooleanField(array(
                 'label' => __('Enable Debug Logging'),
                 'default' => false,
