@@ -1,0 +1,11 @@
+{
+    "name": "osticket-ai/response-suggester",
+    "description": "AI-powered response suggestions for osTicket",
+    "type": "osticket-plugin",
+    "require-dev": {
+        "phpunit/phpunit": "^9"
+    },
+    "autoload": {
+        "classmap": ["src/"]
+    }
+}

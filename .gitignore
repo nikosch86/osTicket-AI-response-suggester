@@ -1,0 +1,10 @@
+/vendor/
+/dist/
+/coverage/
+.phpunit.result.cache
+.phpunit.cache/
+
+.idea/
+.vscode/
+*.swp
+.DS_Store
