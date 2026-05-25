@@ -17,19 +17,53 @@ Supports **OpenAI**, **Anthropic**, and any **OpenAI-compatible** API endpoint.
 
 ## Installation
 
-1. Download or clone this repository into your osTicket plugins directory:
+The plugin is distributed as a versioned tarball attached to each [GitHub Release](https://github.com/nikosch86/osTicket-AI-response-suggester/releases). The artifact contains exactly the plugin files — no `vendor/`, no `tests/`, no dev scaffolding.
 
-   ```bash
-   cp -r ai-response-suggester /path/to/osticket/include/plugins/
-   ```
+### Download and verify
 
-2. Log in to the osTicket **Admin Panel**.
+```bash
+VERSION=1.0.0
+BASE="https://github.com/nikosch86/osTicket-AI-response-suggester/releases/download/v${VERSION}"
+curl -fsSLO "${BASE}/ai-response-suggester-${VERSION}.tar.gz"
+curl -fsSLO "${BASE}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
 
-3. Navigate to **Manage > Plugins > Add New Plugin**.
+### Extract into osTicket
 
-4. Select **AI Response Suggester** from the list and click **Install**.
+```bash
+tar -xzf "ai-response-suggester-${VERSION}.tar.gz" -C /path/to/osticket/include/plugins/
+chown -R www-data:www-data /path/to/osticket/include/plugins/ai-response-suggester
+```
 
-5. After installation, click the plugin name to open its configuration page.
+This creates `/path/to/osticket/include/plugins/ai-response-suggester/`. Adjust the ownership to whatever user PHP-FPM runs as on your host.
+
+### Enable in osTicket
+
+1. Log in to the osTicket **Admin Panel**.
+2. Navigate to **Manage → Plugins → Add New Plugin**.
+3. Select **AI Response Suggester** and click **Install**.
+4. Click the plugin name to open its configuration page (continue with [Configuration](#configuration)).
+
+## Upgrade
+
+```bash
+VERSION=1.0.1
+# (download + verify as above)
+tar -xzf "ai-response-suggester-${VERSION}.tar.gz" -C /path/to/osticket/include/plugins/
+```
+
+The contents replace cleanly over the existing directory. osTicket detects the new manifest version (`plugin.php`'s `version` field) on the next admin page load and surfaces an "upgrade available" prompt where appropriate.
+
+> **Schema changes between versions are not automated yet** — see [Limitations](#limitations). Until that gap is closed, any release that requires a schema change documents the manual `ALTER` in its release notes.
+
+## Deployer responsibilities
+
+This plugin does not orchestrate its own deployment. If you are scripting installs (Ansible, Docker, CI/CD pipelines), the following are your responsibility, not the plugin's:
+
+- **Opcache invalidation.** PHP-FPM running with `opcache.validate_timestamps=0` will keep old code in memory until php-fpm is reloaded. Freshly-extracted files will appear to do nothing until you `systemctl reload php-fpm` (or equivalent).
+- **File ownership and permissions.** The user PHP-FPM runs as must be able to read every file under `ai-response-suggester/`.
+- **One-time admin install/enable on a fresh install.** osTicket's plugin registry lives in the database. The first time the plugin is deployed, a human must click **Install** and **Enable** in the admin UI (or write directly to `ost_plugin`). Subsequent file-only upgrades do not need this step.
 
 ## Configuration
 
@@ -175,6 +209,10 @@ ai-response-suggester/
 │   ├── OpenAIClientTest.php
 │   ├── PromptBuilderTest.php
 │   └── WebCrawlerTest.php
+├── docs/
+│   └── adr/                            # Architecture decision records
+├── .github/
+│   └── workflows/release.yml           # Builds tarball + SHA256SUMS on tag push
 ├── Makefile                            # Docker-based test/lint/build targets
 ├── composer.json
 └── phpunit.xml
@@ -194,12 +232,18 @@ make test
 # Run linter (requires: make install-lint)
 make lint
 
-# Build distributable archive
+# Build distributable archive (VERSION auto-extracted from plugin.php; override with VERSION=x.y.z)
 make build
 
 # Clean build artifacts
 make clean
 ```
+
+Releases are tag-driven and built by CI — see [`docs/adr/0001-release-pipeline.md`](docs/adr/0001-release-pipeline.md). Cutting a release is: bump `plugin.php`'s `version`, commit, `git tag vX.Y.Z && git push --tags`. The workflow validates the tag against the manifest, builds the tarball, and publishes the Release.
+
+## Limitations
+
+- **No schema migration mechanism.** The plugin creates its `ai_crawler_content` table on first load via `CREATE TABLE IF NOT EXISTS`, but has no mechanism to `ALTER` an existing table when the schema changes between versions. The first release that requires a schema change will need to ship an in-plugin migration runner alongside it. See [`docs/adr/0001-release-pipeline.md`](docs/adr/0001-release-pipeline.md).
 
 ## License
 

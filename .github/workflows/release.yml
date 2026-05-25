@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@v4
+
+      - name: Validate tag matches plugin manifest version
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          MANIFEST_VERSION="$(grep -oP "'version'\s*=>\s*'\K[^']+" plugin.php)"
+          echo "Tag version:      $TAG_VERSION"
+          echo "Manifest version: $MANIFEST_VERSION"
+          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (=> $TAG_VERSION) does not match plugin.php version $MANIFEST_VERSION"
+            exit 1
+          fi
+          echo "VERSION=$TAG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build tarball and SHA256SUMS
+        run: make build VERSION="$VERSION"
+
+      - name: Verify SHA256SUMS
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PRERELEASE_FLAG=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            PRERELEASE_FLAG=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "${PRERELEASE_FLAG[@]}" \
+            "dist/ai-response-suggester-${VERSION}.tar.gz" \
+            "dist/SHA256SUMS"

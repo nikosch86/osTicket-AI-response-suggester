@@ -3,9 +3,10 @@
 class ContentStore {
     private static $tableEnsured = false;
 
-    /**
-     * Create the crawled content table if it doesn't exist.
-     */
+    // NOTE: schema changes to this table will NOT propagate to existing installs.
+    // `CREATE TABLE IF NOT EXISTS` is a no-op once the table exists, so any column
+    // added below silently fails to appear in upgraded deployments. Before changing
+    // the schema, an in-plugin migration runner must be built. See README "Limitations".
     private static function createTableSql(): string {
         $prefix = TABLE_PREFIX;
         return "CREATE TABLE IF NOT EXISTS `{$prefix}ai_crawler_content` (
